@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BKR NEXUS - ENTERPRISE DASHBOARD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body { 
+            background-color: #0f172a; /* Slate 900 - สบายตา ไม่ดำสนิท */
+            color: #f8fafc; 
+            font-family: 'Inter', sans-serif; 
+            overflow-x: hidden; 
+        }
+        .mono-font { font-family: 'JetBrains Mono', monospace; }
+        
+        /* สไตล์ Glassmorphism แบบคลีนๆ สบายตา */
+        .glass-panel { 
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            border-radius: 1.5rem;
+        }
+        
+        #three-container { 
+            width: 100%; 
+            height: 500px; 
+            border-radius: 1rem; 
+            overflow: hidden; 
+            background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+        }
+
+        /* Custom Slider สบายตา */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { 
+            -webkit-appearance: none; height: 20px; width: 20px; 
+            background: #ffffff; border: 2px solid #3b82f6; border-radius: 50%;
+            cursor: pointer; margin-top: -8px; box-shadow: 0 0 10px rgba(59, 130, 246, 0.3); 
+        }
+        input[type=range]::-webkit-slider-runnable-track { 
+            width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; 
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col">
+
+    <header class="flex justify-between items-end mb-8 border-b border-slate-700 pb-5">
+        <div>
+            <h1 class="text-4xl font-bold tracking-tight text-white">BKR <span class="text-blue-500">NEXUS</span></h1>
+            <p class="text-sm text-slate-400 font-light mt-1 tracking-widest uppercase">Autonomous Waste Telemetry</p>
+        </div>
+        <div class="hidden md:flex items-center">
+            <span class="flex h-3 w-3 relative mr-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+            </span>
+            <span class="text-slate-300 text-sm mono-font">SYSTEM ONLINE</span>
+        </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow mb-8">
+        
+        <div class="lg:col-span-2 glass-panel p-2 relative">
+            <div class="absolute top-6 left-6 z-10 flex items-center bg-slate-900/50 px-3 py-1.5 rounded-full border border-slate-700">
+                <svg class="w-4 h-4 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                <span class="text-slate-300 text-xs tracking-wider uppercase font-semibold">Live 3D View</span>
+            </div>
+            <div id="three-container"></div>
+        </div>
+
+        <div class="space-y-6 flex flex-col">
+            
+            <div class="glass-panel p-8 flex-1 relative overflow-hidden group">
+                <p class="text-slate-400 text-xs tracking-widest uppercase mb-1 font-semibold">Volume Capacity</p>
+                <div class="flex items-baseline justify-between mt-2">
+                    <span id="percentText" class="text-7xl font-bold text-white tracking-tighter">0<span class="text-3xl text-slate-500 font-light">%</span></span>
+                    <span id="levelLabel" class="text-emerald-400 text-sm font-bold tracking-widest uppercase bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20">SAFE</span>
+                </div>
+                
+                <div class="w-full bg-slate-800 h-1.5 mt-6 rounded-full overflow-hidden">
+                    <div id="progressBar" class="h-full bg-emerald-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+                <div id="lidStatus" class="text-xs text-slate-500 mt-4 mono-font">Lid Status: OPEN</div>
+            </div>
+
+            <div class="glass-panel p-8 flex-1 relative overflow-hidden">
+                <p class="text-slate-400 text-xs tracking-widest uppercase mb-1 font-semibold">Mass Payload</p>
+                <div class="flex items-baseline mt-2">
+                    <span id="weightText" class="text-6xl font-bold text-white tracking-tighter transition-colors duration-300">0.00</span>
+                    <span class="ml-3 text-slate-500 text-xl font-light">KG</span>
+                </div>
+                <div id="weightAlert" class="mt-6 flex items-center text-xs text-slate-500 mono-font">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 mr-2" id="weightDot"></div>
+                    <span id="weightMsg">Load normal</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="glass-panel p-6 border-t-4 border-t-blue-500 bg-slate-800/50">
+        <div class="flex items-center mb-6">
+            <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+            <h2 class="text-white text-sm font-semibold tracking-widest uppercase">Presenter Controls (Simulation)</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div>
+                <label class="flex justify-between text-sm text-slate-300 mb-3 mono-font">
+                    <span>CAPACITY SENSOR</span> 
+                    <span id="sliderPercentText" class="text-blue-400 font-bold">0%</span>
+                </label>
+                <input type="range" id="percentSlider" min="0" max="100" value="0">
+            </div>
+            <div>
+                <label class="flex justify-between text-sm text-slate-300 mb-3 mono-font">
+                    <span>LOAD CELL (WEIGHT)</span> 
+                    <span id="sliderWeightText" class="text-blue-400 font-bold">0.00 KG</span>
+                </label>
+                <input type="range" id="weightSlider" min="0" max="15" step="0.1" value="0">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // THREE.JS - PREMIUM ACRYLIC DESIGN
+        // ==========================================
+        const container = document.getElementById('three-container');
+        const scene = new THREE.Scene();
+        
+        // จัดมุมกล้องให้ดูสบายตา ไม่บิดเบี้ยวเกินไป
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(3.5, 2, 5.5); 
+        camera.lookAt(0, -0.2, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        // ทำให้แสงเงาดูนุ่มนวลสมจริงขึ้น
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // 1. ถังอะคริลิกใสพรีเมียม (Premium Acrylic Bin)
+        const binWidth = 1.6, binHeight = 3.2, binDepth = 1.6;
+        const binGeo = new THREE.BoxGeometry(binWidth, binHeight, binDepth);
+        
+        // การตั้งค่าวัสดุให้ใส สบายตา สมจริงเหมือนพลาสติก/อะคริลิกเกรดสูง
+        const binMat = new THREE.MeshPhysicalMaterial({ 
+            color: 0xffffff, 
+            transmission: 0.85, // ความใสกระจก (1 = ใสมาก)
+            opacity: 1, 
+            transparent: true,
+            roughness: 0.1, // มีความขุ่นเล็กน้อยให้ดูมีราคา
+            metalness: 0.1,
+            clearcoat: 1.0, // เคลือบเงา
+            clearcoatRoughness: 0.1,
+            side: THREE.DoubleSide
+        });
+        const bin = new THREE.Mesh(binGeo, binMat);
+        bin.castShadow = false;
+        bin.receiveShadow = true;
+        scene.add(bin);
+
+        // เส้นขอบบางๆ สีขาวนวล (ลบนีออนออก)
+        const edges = new THREE.EdgesGeometry(binGeo);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1, transparent: true, opacity: 0.2 });
+        const wireframe = new THREE.LineSegments(edges, lineMat);
+        bin.add(wireframe);
+
+        // ฝาถัง (พลาสติกด้านสีเทาเข้ม)
+        const lidGeo = new THREE.BoxGeometry(binWidth + 0.05, 0.1, binDepth + 0.05);
+        const lidMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.2 });
+        const lid = new THREE.Mesh(lidGeo, lidMat);
+        const lidGroup = new THREE.Group();
+        lidGroup.position.set(0, binHeight/2 + 0.05, -binDepth/2); 
+        lid.position.set(0, 0, binDepth/2); 
+        lidGroup.add(lid);
+        lidGroup.rotation.x = -Math.PI / 4; 
+        scene.add(lidGroup);
+
+        // ฐานถังขยะด้านล่าง
+        const baseGeo = new THREE.BoxGeometry(binWidth + 0.05, 0.1, binDepth + 0.05);
+        const base = new THREE.Mesh(baseGeo, lidMat);
+        base.position.y = -binHeight/2 - 0.05;
+        scene.add(base);
+
+        // ==========================================
+        // ขยะธรรมชาติ อัดแน่น (Natural Compressed Waste)
+        // ==========================================
+        const wasteGroup = new THREE.Group();
+        wasteGroup.position.y = -(binHeight/2);
+        scene.add(wasteGroup);
+
+        // วัสดุขยะสีธรรมชาติ สบายตา (ไม่มี Emissive เรืองแสง)
+        // ขวดน้ำ (พลาสติกใสสีฟ้าอ่อน)
+        const bottleMat = new THREE.MeshPhysicalMaterial({ color: 0x60a5fa, transmission: 0.6, roughness: 0.3, transparent: true });
+        // ถุงขยะ (พลาสติกขุ่นสีขาว)
+        const bagMat = new THREE.MeshPhysicalMaterial({ color: 0xf8fafc, transmission: 0.3, roughness: 0.6, transparent: true });
+        // กล่องกระดาษ (สีน้ำตาลด้าน)
+        const boxMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.9 });
+
+        function createItem(type) {
+            if(type === 0) { // ขวด
+                const g = new THREE.Group();
+                g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.3, 8), bottleMat));
+                return g;
+            } else if(type === 1) { // ถุง
+                return new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 1), bagMat);
+            } else { // กล่อง
+                return new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.25), boxMat);
+            }
+        }
+
+        // สร้างขยะอัดแน่น 250 ชิ้น
+        const itemsList = [];
+        const totalItems = 250; 
+
+        for(let i=0; i<totalItems; i++) {
+            const type = Math.floor(Math.random() * 3);
+            const item = createItem(type);
+
+            // กระจายให้เต็มพื้นที่ถัง
+            const heightPercent = i / totalItems;
+            const yPos = heightPercent * (binHeight * 0.95); 
+
+            item.position.set(
+                (Math.random() - 0.5) * (binWidth - 0.25),
+                yPos + 0.1, 
+                (Math.random() - 0.5) * (binDepth - 0.25)
+            );
+            item.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+            item.visible = false; // ซ่อนไว้ก่อน
+            
+            item.castShadow = true;
+            item.receiveShadow = true;
+            
+            wasteGroup.add(item);
+            itemsList.push(item);
+        }
+
+        // ==========================================
+        // ระบบแสงสว่างธรรมชาติ (Soft Natural Lighting)
+        // ==========================================
+        // แสงสว่างรอบทิศทางให้นุ่มนวล
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        // แสงส่องจากด้านบนเฉียงๆ สร้างมิติ (เหมือนไฟในออฟฟิศ)
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(5, 10, 5);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        scene.add(dirLight);
+
+        // แสงเสริมด้านหน้าให้เห็นขยะชัดเจน
+        const frontLight = new THREE.DirectionalLight(0xe2e8f0, 0.5);
+        frontLight.position.set(0, 2, 5);
+        scene.add(frontLight);
+
+        // ==========================================
+        // ANIMATION
+        // ==========================================
+        let targetLidRotation = -Math.PI / 4;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // ถังหมุนช้าๆ อย่างนุ่มนวล
+            scene.rotation.y += 0.002; 
+            // ฝาถังขยับแบบ Smooth
+            lidGroup.rotation.x += (targetLidRotation - lidGroup.rotation.x) * 0.1; 
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // ==========================================
+        // INTERACTIVE LOGIC
+        // ==========================================
+        document.getElementById('percentSlider').addEventListener('input', (e) => {
+            const percent = parseInt(e.target.value);
+            
+            // Update Text
+            document.getElementById('sliderPercentText').innerText = percent + '%';
+            document.getElementById('percentText').innerHTML = `${percent}<span class="text-3xl text-slate-500 font-light">%</span>`;
+            document.getElementById('progressBar').style.width = percent + '%';
+
+            let uiColor = 'text-emerald-400';
+            let bgBadge = 'bg-emerald-400/10 border-emerald-400/20';
+            let barColor = '#10b981'; // Emerald 500
+            let statusTxt = 'SAFE';
+            
+            // Logic ควบคุมฝาและสถานะ
+            if (percent >= 85) { 
+                uiColor = 'text-rose-500'; bgBadge = 'bg-rose-500/10 border-rose-500/20'; barColor = '#f43f5e';
+                statusTxt = 'FULL';
+                targetLidRotation = 0; // ฝาปิด
+                document.getElementById('lidStatus').innerHTML = "Lid Status: <span class='text-rose-400 font-bold'>CLOSED (FULL)</span>";
+            } else if (percent >= 70) { 
+                uiColor = 'text-amber-500'; bgBadge = 'bg-amber-500/10 border-amber-500/20'; barColor = '#f59e0b';
+                statusTxt = 'WARNING';
+                targetLidRotation = -Math.PI / 4; 
+                document.getElementById('lidStatus').innerText = "Lid Status: OPEN";
+            } else { 
+                targetLidRotation = -Math.PI / 4; 
+                document.getElementById('lidStatus').innerText = "Lid Status: OPEN";
+            }
+
+            // Apply Styles
+            const badge = document.getElementById('levelLabel');
+            badge.innerText = statusTxt;
+            badge.className = `${uiColor} ${bgBadge} text-sm font-bold tracking-widest uppercase px-3 py-1 rounded-full border`;
+            document.getElementById('progressBar').style.backgroundColor = barColor;
+
+            // แสดงกองขยะตามเปอร์เซ็นต์
+            const numVisibleItems = Math.floor((percent / 100) * totalItems);
+            for(let i=0; i<itemsList.length; i++) {
+                itemsList[i].visible = (i < numVisibleItems);
+            }
+        });
+
+        document.getElementById('weightSlider').addEventListener('input', (e) => {
+            const weight = parseFloat(e.target.value);
+            document.getElementById('sliderWeightText').innerText = weight.toFixed(2) + ' KG';
+            
+            const weightEl = document.getElementById('weightText');
+            const dotEl = document.getElementById('weightDot');
+            const msgEl = document.getElementById('weightMsg');
+            
+            weightEl.innerText = weight.toFixed(2);
+
+            if (weight >= 9.0) {
+                weightEl.className = "text-6xl font-bold text-rose-500 tracking-tighter transition-colors duration-300";
+                dotEl.className = "w-2 h-2 rounded-full bg-rose-500 mr-2 animate-pulse";
+                msgEl.innerHTML = "<span class='text-rose-400 font-bold'>OVERWEIGHT ALERT!</span>";
+            } else {
+                weightEl.className = "text-6xl font-bold text-white tracking-tighter transition-colors duration-300";
+                dotEl.className = "w-2 h-2 rounded-full bg-emerald-500 mr-2";
+                msgEl.innerText = "Load normal";
+            }
+        });
+    </script>
+</body>
+</html>
