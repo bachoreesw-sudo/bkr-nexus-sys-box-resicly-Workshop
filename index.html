@@ -130,11 +130,11 @@
 
     <script>
         // ==========================================
-        // 🔥 FIREBASE CONFIGURATION 
+        // 🔥 FIREBASE CONFIGURATION (กรุณาใส่ API Key ของคุณ)
         // ==========================================
         const firebaseConfig = {
-            apiKey: "ใส่_API_KEY_ของคุณ",
-            authDomain: "ใส่_PROJECT_ID.firebaseapp.com",
+            apiKey: "AIzaSyB4EASpyeK0Aa_20VRsjTmtAbex7yUtkSE",
+            authDomain: "iftefa.firebaseapp.com",
             databaseURL: "https://iftefa-default-rtdb.firebaseio.com",
             projectId: "iftefa",
             storageBucket: "iftefa.appspot.com",
@@ -168,6 +168,7 @@
         const mapInstruction = document.getElementById('mapInstruction');
         const mapEl = document.getElementById('map');
 
+        // เปิดโหมดจิ้มแผนที่
         addBtn.addEventListener('click', () => {
             isAddingMode = true;
             mapEl.style.cursor = 'crosshair';
@@ -176,6 +177,7 @@
             mapInstruction.innerHTML = "🔴 <span class='text-amber-500 font-bold'>โหมดเพิ่มพิกัด:</span> นำเมาส์ไปคลิกบนแผนที่ในจุดที่ต้องการตั้งถังขยะ";
         });
 
+        // กดแผนที่เพื่อดึงพิกัด
         map.on('click', (e) => {
             if (!isAddingMode) return;
             tempLatLng = e.latlng;
@@ -193,13 +195,31 @@
 
         document.getElementById('cancelAddBtn').addEventListener('click', () => { document.getElementById('addNodeModal').style.display = 'none'; });
 
+        // ==========================================
+        // 🔴 [ส่วนที่แก้ไข] ยิงข้อมูลขึ้น Firebase ทันทีเมื่อกดบันทึก
+        // ==========================================
         document.getElementById('confirmAddBtn').addEventListener('click', () => {
             const newId = document.getElementById('newNodeName').value.trim() || "Node_1";
             const name = "จุดใช้งาน: " + newId;
-            campusData[newId] = { name: name, lat: tempLatLng.lat, lng: tempLatLng.lng, percent: 0, weight: 0.0 };
-            createMarker(newId);
-            document.getElementById('addNodeModal').style.display = 'none';
-            switchActiveNode(newId);
+            
+            const newNodeData = {
+                name: name,
+                lat: tempLatLng.lat,
+                lng: tempLatLng.lng,
+                percent: 0,
+                weight: 0.0
+            };
+
+            // ส่งข้อมูลขึ้น Cloud ทันที ทุกคนจะเห็นพร้อมกัน
+            database.ref('BKR_NEXUS/Nodes/' + newId).set(newNodeData)
+            .then(() => {
+                document.getElementById('addNodeModal').style.display = 'none';
+                // หน่วงเวลาเล็กน้อยเพื่อให้ Listener ดึงหมุดมาวาด แล้วค่อยเปิดดู
+                setTimeout(() => { if(campusData[newId]) switchActiveNode(newId); }, 500);
+            })
+            .catch((error) => {
+                alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
+            });
         });
 
         function getMarkerClass(percent, isActive) {
@@ -284,7 +304,10 @@
             }
             activeNodeId = nodeId;
             const data = campusData[activeNodeId];
-            markers[activeNodeId].setIcon(L.divIcon({ html: `<div class="${getMarkerClass(data.percent, true)}"></div>`, className: '' }));
+            
+            if(markers[activeNodeId]) {
+                markers[activeNodeId].setIcon(L.divIcon({ html: `<div class="${getMarkerClass(data.percent, true)}"></div>`, className: '' }));
+            }
             
             document.getElementById('activeNodeTitle').innerText = data.name;
             document.getElementById('controlTargetText').innerText = data.name;
@@ -322,16 +345,39 @@
         }
 
         // ==========================================
-        // 📡 DATA SYNC: 1. FIREBASE 
+        // 🔴 [ส่วนที่แก้ไข] DATA SYNC: FIREBASE (สร้างหมุดใหม่ให้ทุกคน)
         // ==========================================
         database.ref('BKR_NEXUS/Nodes').on('value', (snapshot) => {
             const nodesData = snapshot.val();
             if (nodesData) {
                 for (let nodeId in nodesData) {
-                    if (campusData[nodeId]) {
-                        campusData[nodeId].percent = nodesData[nodeId].percent || 0;
-                        campusData[nodeId].weight = parseFloat(nodesData[nodeId].weight) || 0.0;
-                        if (nodeId === activeNodeId) { syncDataToUI(campusData[nodeId].percent, campusData[nodeId].weight); }
+                    const node = nodesData[nodeId];
+                    const newPercent = node.percent || 0;
+                    const newWeight = parseFloat(node.weight) || 0.0;
+
+                    if (!campusData[nodeId]) {
+                        // 🌟 โหนดใหม่เอี่ยม (สร้างขึ้นในเครื่องนี้เลย ไม่ว่าใครจะเป็นคนจิ้มแผนที่ก็ตาม)
+                        campusData[nodeId] = {
+                            name: node.name || ("จุดใช้งาน: " + nodeId),
+                            lat: node.lat,
+                            lng: node.lng,
+                            percent: newPercent,
+                            weight: newWeight
+                        };
+                        createMarker(nodeId);
+                    } else {
+                        // 🔄 อัปเดตโหนดเดิมที่มีอยู่แล้ว
+                        campusData[nodeId].percent = newPercent;
+                        campusData[nodeId].weight = newWeight;
+                        if (markers[nodeId]) {
+                            const isActive = (nodeId === activeNodeId);
+                            markers[nodeId].setIcon(L.divIcon({ html: `<div class="${getMarkerClass(newPercent, isActive)}"></div>`, className: '' }));
+                        }
+                    }
+
+                    // อัปเดต 3D ทันทีถ้าบังเอิญกำลังดูโหนดที่มีการเคลื่อนไหวอยู่
+                    if (nodeId === activeNodeId) { 
+                        syncDataToUI(newPercent, newWeight); 
                     }
                 }
             }
