@@ -46,11 +46,13 @@
             <p class="text-[10px] text-slate-500 uppercase tracking-[0.2em]">ระบบจัดวางผังถังขยะอัจฉริยะ (LIVE SENSOR)</p>
         </div>
         <div class="flex gap-2">
+            <div id="firebaseStatusBtn" class="bg-red-900/30 text-xs px-3 py-1 rounded border border-red-500/50 flex items-center gap-2 transition-colors">
+                <span id="firebaseDot" class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
+                <span id="firebaseText" class="text-red-400 font-bold tracking-widest">ESP32: OFFLINE</span>
+            </div>
+
             <button id="bleBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center shadow-[0_0_10px_rgba(79,70,229,0.5)] transition-all">
                 📡 WEB BLUETOOTH
-            </button>
-            <button id="weatherBtn" class="bg-slate-800 text-xs px-3 py-1 rounded border border-slate-600 hover:border-blue-500 transition-colors">
-                🌤️ สภาพอากาศ: แดดออก
             </button>
         </div>
     </header>
@@ -59,15 +61,14 @@
         
         <div class="glass-panel p-4 flex flex-col relative">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="cyber-font text-blue-400 text-sm">DIGITAL TWIN NODE: <span id="activeNodeTitle" class="text-white font-bold text-lg ml-2">--</span></h3>
+                <h3 class="cyber-font text-blue-400 text-sm">DIGITAL TWIN NODE: <span id="activeNodeTitle" class="text-white font-bold text-lg ml-2">รอสัญญาณ...</span></h3>
                 <span id="nodeStatusBadge" class="bg-slate-800 text-slate-500 text-[10px] px-2 py-1 rounded uppercase tracking-widest">NO DATA</span>
             </div>
             
             <div id="three-container">
                 <div id="emptyStateOverlay">
-                    <div class="text-4xl mb-4 animate-bounce">📍</div>
-                    <p class="text-white font-bold tracking-widest">ยังไม่มีจุดติดตั้งถังขยะ</p>
-                    <p class="text-xs text-slate-400 mt-2">กรุณากดเพิ่มถังขยะบนแผนที่ด้านขวามือ</p>
+                    <div class="w-8 h-8 rounded-full border-4 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent animate-spin mb-4"></div>
+                    <p class="text-white font-bold tracking-widest">กำลังเชื่อมต่ออาคาร 7...</p>
                 </div>
             </div>
             
@@ -94,7 +95,7 @@
             <div id="map"></div>
             
             <div class="mt-4 bg-slate-900/50 p-3 rounded-lg border border-slate-800 text-[10px] text-slate-400">
-                <span id="mapInstruction">💡 <span class="text-white">คำแนะนำ:</span> คลิกปุ่ม "เพิ่มจุดถังขยะ" แล้วนำเมาส์ไปจิ้มบนแผนที่ในจุดที่ต้องการ</span>
+                <span id="mapInstruction">💡 <span class="text-white">สถานะ:</span> <span class="text-emerald-400">ดึงข้อมูลอาคาร 7 อัตโนมัติ</span> (คลิกปุ่มเพื่อเพิ่มจุดอื่นได้)</span>
             </div>
         </div>
     </main>
@@ -130,7 +131,7 @@
 
     <script>
         // ==========================================
-        // 🔥 FIREBASE CONFIGURATION (กรุณาใส่ API Key ของคุณ)
+        // 🔥 FIREBASE CONFIGURATION (ใส่ API ของคุณ)
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyB4EASpyeK0Aa_20VRsjTmtAbex7yUtkSE",
@@ -138,12 +139,46 @@
             databaseURL: "https://iftefa-default-rtdb.firebaseio.com",
             projectId: "iftefa",
             storageBucket: "iftefa.appspot.com",
-            messagingSenderId: "ใส่_SENDER_ID",
-            appId: "ใส่_APP_ID"
+            messagingSenderId: "4464303728", // <- ใส่ให้ครบ
+            appId: "1:4464303728:web:ab6d0a2615c76b7b82deb5" // <- ใส่ให้ครบ
         };
         
         if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const database = firebase.database();
+
+        // ==========================================
+        // 🟢 เช็คสถานะของบอร์ด ESP32 (ระบบ Heartbeat)
+        // ==========================================
+        const fbDot = document.getElementById('firebaseDot');
+        const fbText = document.getElementById('firebaseText');
+        const fbBtn = document.getElementById('firebaseStatusBtn');
+        let espWatchdog; 
+
+        function setDeviceOffline() {
+            fbDot.className = "w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]";
+            fbText.innerText = "ESP32: OFFLINE";
+            fbText.className = "text-red-400 font-bold tracking-widest";
+            fbBtn.className = "bg-red-900/30 text-xs px-3 py-1 rounded border border-red-500/50 flex items-center gap-2 transition-colors";
+        }
+
+        function setDeviceOnline() {
+            fbDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]";
+            fbText.innerText = "ESP32: ONLINE";
+            fbText.className = "text-emerald-400 font-bold tracking-widest";
+            fbBtn.className = "bg-emerald-900/30 text-xs px-3 py-1 rounded border border-emerald-500/50 flex items-center gap-2 transition-colors";
+        }
+
+        // คอยดักจับค่า "ชีพจร" ที่ ESP32 ส่งมา
+        database.ref('BKR_NEXUS/Nodes/Node_1/heartbeat').on('value', function(snapshot) {
+            if (snapshot.exists()) {
+                setDeviceOnline();
+                clearTimeout(espWatchdog);
+                // ถ้านิ่งไป 10 วินาที ให้ขึ้น Offline
+                espWatchdog = setTimeout(() => {
+                    setDeviceOffline();
+                }, 10000); 
+            }
+        });
 
         let campusData = {}; 
         let activeNodeId = null;
@@ -156,9 +191,7 @@
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
-            maxZoom: 22, 
-            maxNativeZoom: 18,
-            attribution: 'Esri World Imagery' 
+            maxZoom: 22, maxNativeZoom: 18, attribution: 'Esri World Imagery' 
         }).addTo(map);
 
         let isAddingMode = false;
@@ -168,16 +201,13 @@
         const mapInstruction = document.getElementById('mapInstruction');
         const mapEl = document.getElementById('map');
 
-        // เปิดโหมดจิ้มแผนที่
         addBtn.addEventListener('click', () => {
             isAddingMode = true;
             mapEl.style.cursor = 'crosshair';
             addBtn.classList.replace('bg-blue-600', 'bg-amber-500');
             addBtn.innerText = "📍 จิ้มพิกัดบนแผนที่เลย...";
-            mapInstruction.innerHTML = "🔴 <span class='text-amber-500 font-bold'>โหมดเพิ่มพิกัด:</span> นำเมาส์ไปคลิกบนแผนที่ในจุดที่ต้องการตั้งถังขยะ";
         });
 
-        // กดแผนที่เพื่อดึงพิกัด
         map.on('click', (e) => {
             if (!isAddingMode) return;
             tempLatLng = e.latlng;
@@ -186,39 +216,22 @@
             mapEl.style.cursor = '';
             addBtn.classList.replace('bg-amber-500', 'bg-blue-600');
             addBtn.innerHTML = "➕ เพิ่มจุดถังขยะ";
-            mapInstruction.innerHTML = "💡 <span class='text-white'>คำแนะนำ:</span> คลิกปุ่มเพิ่มจุดถังขยะ หรือคลิกที่หมุดเก่าเพื่อดูสถานะ";
             
-            document.getElementById('newNodeName').value = "Node_1";
+            document.getElementById('newNodeName').value = "Node_2";
             document.getElementById('addNodeModal').style.display = 'flex';
             document.getElementById('newNodeName').focus();
         });
 
         document.getElementById('cancelAddBtn').addEventListener('click', () => { document.getElementById('addNodeModal').style.display = 'none'; });
 
-        // ==========================================
-        // 🔴 [ส่วนที่แก้ไข] ยิงข้อมูลขึ้น Firebase ทันทีเมื่อกดบันทึก
-        // ==========================================
         document.getElementById('confirmAddBtn').addEventListener('click', () => {
-            const newId = document.getElementById('newNodeName').value.trim() || "Node_1";
+            const newId = document.getElementById('newNodeName').value.trim() || "Node_2";
             const name = "จุดใช้งาน: " + newId;
-            
-            const newNodeData = {
-                name: name,
-                lat: tempLatLng.lat,
-                lng: tempLatLng.lng,
-                percent: 0,
-                weight: 0.0
-            };
-
-            // ส่งข้อมูลขึ้น Cloud ทันที ทุกคนจะเห็นพร้อมกัน
+            const newNodeData = { name: name, lat: tempLatLng.lat, lng: tempLatLng.lng, percent: 0, weight: 0.0 };
             database.ref('BKR_NEXUS/Nodes/' + newId).set(newNodeData)
             .then(() => {
                 document.getElementById('addNodeModal').style.display = 'none';
-                // หน่วงเวลาเล็กน้อยเพื่อให้ Listener ดึงหมุดมาวาด แล้วค่อยเปิดดู
                 setTimeout(() => { if(campusData[newId]) switchActiveNode(newId); }, 500);
-            })
-            .catch((error) => {
-                alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
             });
         });
 
@@ -233,7 +246,7 @@
 
         function createMarker(id) {
             const data = campusData[id];
-            const icon = L.divIcon({ html: `<div class="${getMarkerClass(data.percent, false)}"></div>`, className: '' });
+            const icon = L.divIcon({ html: `<div class="${getMarkerClass(data.percent, id === activeNodeId)}"></div>`, className: '' });
             const marker = L.marker([data.lat, data.lng], {icon: icon}).addTo(map);
             marker.bindTooltip(data.name, {permanent: true, direction: "top", offset: [0, -10], className: "map-label"});
             marker.on('click', () => { switchActiveNode(id); });
@@ -241,7 +254,7 @@
         }
 
         // ==========================================
-        // 🧊 THREE.JS 3D SCENE & WEATHER
+        // 🧊 THREE.JS 3D SCENE
         // ==========================================
         const container = document.getElementById('three-container');
         const scene = new THREE.Scene();
@@ -339,34 +352,37 @@
 
             const numVisible = Math.floor((percent / 100) * totalItems);
             for(let i=0; i<itemsList.length; i++) itemsList[i].visible = (i < numVisible);
-            if(markers[activeNodeId]){
-                markers[activeNodeId].setIcon(L.divIcon({ html: `<div class="${getMarkerClass(percent, true)}"></div>`, className: '' }));
-            }
         }
 
         // ==========================================
-        // 🔴 [ส่วนที่แก้ไข] DATA SYNC: FIREBASE (สร้างหมุดใหม่ให้ทุกคน)
+        // 🔄 DATA SYNC: FIREBASE (AUTO-CONNECT NODE_1)
         // ==========================================
+        let isFirstLoad = true;
+
         database.ref('BKR_NEXUS/Nodes').on('value', (snapshot) => {
             const nodesData = snapshot.val();
+            
+            const defaultNodeId = "Node_1";
+            let node1Exists = nodesData && nodesData[defaultNodeId];
+            
             if (nodesData) {
                 for (let nodeId in nodesData) {
                     const node = nodesData[nodeId];
+                    
+                    const defaultLat = (nodeId === "Node_1") ? 6.43118 : 0;
+                    const defaultLng = (nodeId === "Node_1") ? 101.82002 : 0;
+                    const defaultName = (nodeId === "Node_1") ? "อาคาร 7" : ("จุดใช้งาน: " + nodeId);
+
                     const newPercent = node.percent || 0;
                     const newWeight = parseFloat(node.weight) || 0.0;
+                    const finalLat = node.lat || defaultLat;
+                    const finalLng = node.lng || defaultLng;
+                    const finalName = node.name || defaultName;
 
                     if (!campusData[nodeId]) {
-                        // 🌟 โหนดใหม่เอี่ยม (สร้างขึ้นในเครื่องนี้เลย ไม่ว่าใครจะเป็นคนจิ้มแผนที่ก็ตาม)
-                        campusData[nodeId] = {
-                            name: node.name || ("จุดใช้งาน: " + nodeId),
-                            lat: node.lat,
-                            lng: node.lng,
-                            percent: newPercent,
-                            weight: newWeight
-                        };
-                        createMarker(nodeId);
+                        campusData[nodeId] = { name: finalName, lat: finalLat, lng: finalLng, percent: newPercent, weight: newWeight };
+                        if(finalLat !== 0) createMarker(nodeId);
                     } else {
-                        // 🔄 อัปเดตโหนดเดิมที่มีอยู่แล้ว
                         campusData[nodeId].percent = newPercent;
                         campusData[nodeId].weight = newWeight;
                         if (markers[nodeId]) {
@@ -375,24 +391,28 @@
                         }
                     }
 
-                    // อัปเดต 3D ทันทีถ้าบังเอิญกำลังดูโหนดที่มีการเคลื่อนไหวอยู่
-                    if (nodeId === activeNodeId) { 
-                        syncDataToUI(newPercent, newWeight); 
-                    }
+                    if (nodeId === activeNodeId) syncDataToUI(newPercent, newWeight); 
                 }
+            }
+            
+            if (isFirstLoad) {
+                if (campusData[defaultNodeId]) {
+                    switchActiveNode(defaultNodeId);
+                } else {
+                    campusData[defaultNodeId] = { name: "อาคาร 7", lat: 6.43118, lng: 101.82002, percent: 0, weight: 0.0 };
+                    createMarker(defaultNodeId);
+                    switchActiveNode(defaultNodeId);
+                }
+                isFirstLoad = false;
             }
         });
 
         // ==========================================
-        // 📡 DATA SYNC: 2. WEB BLUETOOTH (BLE)
+        // 📡 DATA SYNC: WEB BLUETOOTH (BLE)
         // ==========================================
         document.getElementById('bleBtn').addEventListener('click', async () => {
             try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'BKR NEXUS' }],
-                    optionalServices: ['4fafc201-1bfb-4bfd-8b48-cc1234567890']
-                });
-                
+                const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'BKR NEXUS' }], optionalServices: ['4fafc201-1bfb-4bfd-8b48-cc1234567890'] });
                 document.getElementById('bleBtn').innerText = "🔗 กำลังเชื่อมต่อ...";
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('4fafc201-1bfb-4bfd-8b48-cc1234567890');
@@ -408,13 +428,12 @@
                             campusData[activeNodeId].weight = data.weight;
                             syncDataToUI(data.percent, data.weight);
                         }
-                    } catch(e) { console.log("BLE Message: ", value); }
+                    } catch(e) {}
                 });
 
                 document.getElementById('bleBtn').innerText = "✅ BLE Connected";
                 document.getElementById('bleBtn').classList.replace('bg-indigo-600', 'bg-emerald-600');
             } catch (error) {
-                console.log(error);
                 document.getElementById('bleBtn').innerText = "❌ BLE Failed";
                 setTimeout(() => document.getElementById('bleBtn').innerText = "📡 WEB BLUETOOTH", 3000);
             }
